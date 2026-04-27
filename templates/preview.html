@@ -3,37 +3,485 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Video Preview</title>
-    <link rel="stylesheet" href="{{url_for('static', filename='home.css')}}">
-    <script src="{{url_for('static', filename='drag_and_drop.js')}}"></script>
+    <title>Photo Slideshow with Audio</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            font-family: Arial, sans-serif;
+            overflow-x: hidden;
+        }
+
+        .player-wrapper {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .player-wrapper.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 9999;
+        }
+
+        .slideshow-main {
+            position: relative;
+            width: 100%;
+            height: 90%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #000;
+            overflow: hidden;
+        }
+
+        #slides-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .slide {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+        }
+
+        .slide.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .slide img {
+            max-width: 95%;
+            max-height: 95%;
+            object-fit: contain;
+            border-radius: 5px;
+        }
+
+        .slide-counter {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 100;
+            font-weight: bold;
+        }
+
+        .top-controls {
+            position: absolute;
+            top: 20px;
+            left: 30px;
+            z-index: 100;
+            display: flex;
+            gap: 10px;
+        }
+
+        .back-btn, .fullscreen-btn {
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .back-btn:hover, .fullscreen-btn:hover {
+            background: rgba(255, 107, 53, 0.9);
+        }
+
+        .controls-bar {
+            width: 100%;
+            height: 10%;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+            padding: 20px;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .control-button {
+            background: #FF6B35;
+            border: 2px solid #0066cc;
+            color: #0066cc;
+            padding: 12px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            transition: background 0.3s, transform 0.2s;
+        }
+
+        .control-button:hover {
+            background: #e55a28;
+            transform: scale(1.05);
+        }
+
+        .control-button:active {
+            transform: scale(0.98);
+        }
+
+        .speed-control {
+            position: relative;
+        }
+
+        .speed-dropdown {
+            background: #FF6B35;
+            border: 2px solid #0066cc;
+            color: #0066cc;
+            padding: 12px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .speed-dropdown option {
+            background: #333;
+            color: white;
+        }
+
+        .speed-dropdown:hover {
+            background: #e55a28;
+        }
+
+        .audio-info {
+            background: rgba(0, 0, 0, 0.8);
+            color: #0066cc;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            text-align: center;
+            border: 2px solid #0066cc;
+            font-weight: bold;
+        }
+
+        .empty-message {
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @media (max-width: 768px) {
+            .controls-bar {
+                height: 15%;
+                gap: 8px;
+                padding: 15px;
+            }
+
+            .control-button, .speed-dropdown {
+                padding: 10px 15px;
+                font-size: 12px;
+            }
+
+            .slide-counter {
+                font-size: 12px;
+                right: 15px;
+                top: 15px;
+            }
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
 </head>
 <body>
-    <style>
-        #display_selected {
-    border: 2px solid rgb(4, 12, 103);
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    overflow-y:scroll;
-    gap: 10px;
-}
+    <div class="player-wrapper" id="playerWrapper">
+        <!-- Top controls -->
+        <div class="top-controls">
+            <button class="back-btn" onclick="goBack()">← Back</button>
+            <button class="fullscreen-btn" id="fullscreenBtn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+        </div>
 
-#display_selected img {
-    padding: 10px;
-    width: 100px;
-    height: auto;
-}
-    </style>
-    <div class="display_selected">
-        <img src="{{url_for('static', filename='like1.png.png')}}" style="width: 100px; height: 100px;">
-        <img src="{{url_for('static', filename='gmail.jpg')}}" style="width: 100px; height: 100px;">
-        <img src="{{url_for('static', filename='insta_logo.png')}}" style="width: 100px; height: 100px;">
-        <img src="{{url_for('static', filename='dark_mode.jpg')}}" style="width: 100px; height: 100px;">
-        <img src="{{url_for('static', filename='github.png')}}" style="width: 100px; height: 100px;">
+        <!-- Main slideshow area -->
+        <div class="slideshow-main">
+            <div id="slides-container"></div>
+            <div class="slide-counter">
+                <span id="current-slide">0</span> / <span id="total-slides">0</span>
+            </div>
+        </div>
+
+        <!-- Controls bar at bottom -->
+        <div class="controls-bar">
+            <button class="control-button" onclick="previousSlide()">⏮ Previous</button>
+            <button class="control-button" id="playPauseBtn" onclick="togglePlayPause()">⏸ Pause</button>
+            <button class="control-button" onclick="nextSlide()">Next ⏭</button>
+            <button class="control-button" onclick="downloadCurrentImage()">⬇ Download</button>
+            
+            <div class="speed-control">
+                <select class="speed-dropdown" id="speedControl" onchange="changeSpeed()">
+                    <option value="1">Speed: 1x</option>
+                    <option value="0.5">Speed: 0.5x</option>
+                    <option value="1.5">Speed: 1.5x</option>
+                    <option value="2">Speed: 2x</option>
+                </select>
+            </div>
+
+            <div class="audio-info">
+                <strong>🎵 Now Playing:</strong> <span id="currentAudio">Loading...</span>
+            </div>
+        </div>
     </div>
-    
-    <video width="50%" height="auto" controls class="video_player">
-        <source src="{{url_for('static', filename='Chipi chipi chapa chapa cat.mp4')}}" type="video/mp4">
-    </video>
+
+    <!-- Hidden audio element -->
+    <audio id="audioPlayer" loop>
+        Your browser does not support the audio element.
+    </audio>
+
+    <script>
+        let currentSlideIndex = 0;
+        let slides = [];
+        let isAutoPlaying = true;
+        let autoPlayInterval;
+        let selectedAudio = '';
+        let slideDuration = 3000; // Default 3 seconds
+        let isInFullscreen = false;
+
+        // Fetch selected images from server
+        async function loadImages() {
+            try {
+                const response = await fetch('/get_selected_images');
+                const data = await response.json();
+                
+                if (data.images && data.images.length > 0) {
+                    slides = data.images;
+                    renderSlides();
+                    showSlide(0);
+                    updateSlideCounter();
+                    
+                    // Load audio
+                    loadAudio();
+                    
+                    // Start auto-play immediately
+                    startAutoPlay();
+                } else {
+                    showEmptyMessage();
+                }
+            } catch (error) {
+                console.error('Error loading images:', error);
+                showEmptyMessage();
+            }
+        }
+
+        function showEmptyMessage() {
+            document.getElementById('slides-container').innerHTML = '<div class="empty-message">No images to display. Please select images and try again.</div>';
+        }
+
+        function renderSlides() {
+            const container = document.getElementById('slides-container');
+            container.innerHTML = '';
+            slides.forEach((img, index) => {
+                const slide = document.createElement('div');
+                slide.className = 'slide';
+                if (index === 0) slide.classList.add('active');
+                slide.innerHTML = `<img src="${img.data}" alt="Slide ${index + 1}">`;
+                container.appendChild(slide);
+            });
+        }
+
+        function showSlide(index) {
+            if (slides.length === 0) return;
+            
+            if (index >= slides.length) {
+                currentSlideIndex = 0;
+            } else if (index < 0) {
+                currentSlideIndex = slides.length - 1;
+            } else {
+                currentSlideIndex = index;
+            }
+
+            document.querySelectorAll('.slide').forEach(slide => slide.classList.remove('active'));
+            document.querySelectorAll('.slide')[currentSlideIndex].classList.add('active');
+            
+            updateSlideCounter();
+        }
+
+        function nextSlide() {
+            showSlide(currentSlideIndex + 1);
+        }
+
+        function previousSlide() {
+            showSlide(currentSlideIndex - 1);
+        }
+
+        function updateSlideCounter() {
+            document.getElementById('current-slide').textContent = currentSlideIndex + 1;
+            document.getElementById('total-slides').textContent = slides.length;
+        }
+
+        function startAutoPlay() {
+            if (isAutoPlaying) return;
+            isAutoPlaying = true;
+            document.getElementById('playPauseBtn').textContent = '⏸ Pause';
+            
+            // Play audio
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.play().catch(err => console.log('Audio play prevented'));
+            
+            autoPlayInterval = setInterval(() => {
+                nextSlide();
+            }, slideDuration);
+        }
+
+        function stopAutoPlay() {
+            isAutoPlaying = false;
+            document.getElementById('playPauseBtn').textContent = '▶ Play';
+            clearInterval(autoPlayInterval);
+            
+            // Pause audio
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.pause();
+        }
+
+        function togglePlayPause() {
+            if (slides.length === 0) {
+                alert('No images to display');
+                return;
+            }
+
+            if (isAutoPlaying) {
+                stopAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        function changeSpeed() {
+            const speedValue = parseFloat(document.getElementById('speedControl').value);
+            slideDuration = Math.round(3000 / speedValue); // Calculate new duration based on speed
+            
+            // Restart autoplay with new speed
+            if (isAutoPlaying) {
+                stopAutoPlay();
+                startAutoPlay();
+            }
+        }
+
+        function downloadCurrentImage() {
+            if (slides.length === 0) {
+                alert('No images to download');
+                return;
+            }
+
+            const currentImage = slides[currentSlideIndex];
+            const link = document.createElement('a');
+            link.href = currentImage.data;
+            link.download = `slideshow-image-${currentSlideIndex + 1}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function toggleFullscreen() {
+            const wrapper = document.getElementById('playerWrapper');
+            isInFullscreen = !isInFullscreen;
+            
+            if (isInFullscreen) {
+                wrapper.classList.add('fullscreen');
+                document.getElementById('fullscreenBtn').textContent = '⛶ Exit Fullscreen';
+                document.body.style.overflow = 'hidden';
+            } else {
+                wrapper.classList.remove('fullscreen');
+                document.getElementById('fullscreenBtn').textContent = '⛶ Fullscreen';
+                document.body.style.overflow = 'auto';
+            }
+        }
+
+        function goBack() {
+            // Stop audio and slideshow before going back
+            stopAutoPlay();
+            window.location.href = '/home';
+        }
+
+        function loadAudio() {
+            const audioMap = {
+                'chipichipi.mp3': '🎵 Chipi Chipi',
+                'tom_scream.mp3': '🎵 Tom Scream',
+                'sample.mp3': '🎵 Sample'
+            };
+            
+            selectedAudio = '{{ audio_choice }}';
+            const audioPath = '/static/' + selectedAudio;
+            document.getElementById('audioPlayer').src = audioPath;
+            document.getElementById('currentAudio').textContent = audioMap[selectedAudio] || selectedAudio;
+            
+            // Auto-play audio
+            const audioPlayer = document.getElementById('audioPlayer');
+            audioPlayer.play().catch(err => {
+                console.log('Audio autoplay prevented by browser. User needs to interact first.');
+            });
+        }
+
+        // Load images and start slideshow on page load
+        window.addEventListener('load', () => {
+            loadImages();
+        });
+
+        // Handle page visibility to pause/resume audio
+        document.addEventListener('visibilitychange', function() {
+            const audioPlayer = document.getElementById('audioPlayer');
+            if (document.hidden) {
+                audioPlayer.pause();
+            } else {
+                if (isAutoPlaying) {
+                    audioPlayer.play().catch(err => console.log('Cannot resume audio'));
+                }
+            }
+        });
+
+        // Handle Escape key to exit fullscreen
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape' && isInFullscreen) {
+                toggleFullscreen();
+            }
+            // Arrow key navigation
+            if (event.key === 'ArrowRight') {
+                nextSlide();
+            }
+            if (event.key === 'ArrowLeft') {
+                previousSlide();
+            }
+            // Spacebar to pause/play
+            if (event.key === ' ') {
+                event.preventDefault();
+                togglePlayPause();
+            }
+        });
+    </script>
 </body>
 </html>
